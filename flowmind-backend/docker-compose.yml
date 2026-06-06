@@ -1,0 +1,139 @@
+version: '3.9'
+
+# Internal network isolates services from the host network.
+# Only ports explicitly mapped under `ports:` are exposed to the host.
+# This is critical for production parity — in prod, only the API is publicly reachable.
+networks:
+  flowmind-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+
+services:
+  # ─────────────────────────────────────────────
+  # PostgreSQL 16 — Primary Database
+  # pgvector extension will be added via migration
+  # ─────────────────────────────────────────────
+  postgres:
+    image: ankane/pgvector:latest   # pgvector-enabled Postgres (v15 base)
+    container_name: flowmind-postgres
+    restart: unless-stopped
+    networks:
+      - flowmind-net
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-flowmind}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-flowmind}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Redis 7 — Queue backend (BullMQ) + cache
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: flowmind-redis
+    restart: unless-stopped
+    networks:
+      - flowmind-net
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # API Server
+  # Bind-mounts source for hot reload in dev.
+  # node_modules is kept inside the container via an anonymous volume
+  # to prevent host OS node_modules from shadowing the container's.
+  # ─────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: flowmind-api
+    restart: unless-stopped
+    networks:
+      - flowmind-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - '${PORT:-4000}:${PORT:-4000}'
+    volumes:
+      - .:/app
+      - /app/node_modules
+    env_file:
+      - .env
+
+  # ─────────────────────────────────────────────
+  # Worker Process
+  # Consumes BullMQ jobs — runs separately from the API
+  # so it can be scaled independently in production.
+  # ─────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: flowmind-worker
+    restart: unless-stopped
+    networks:
+      - flowmind-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+    env_file:
+      - .env
+
+  # ─────────────────────────────────────────────
+  # pgAdmin 4 — DB inspection tool (dev only)
+  # ─────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: flowmind-pgadmin
+    restart: unless-stopped
+    networks:
+      - flowmind-net
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@flowmind.ai
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - '5050:80'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────
+  # Redis Commander — Redis inspection tool (dev only)
+  # ─────────────────────────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: flowmind-redis-ui
+    restart: unless-stopped
+    networks:
+      - flowmind-net
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - '8081:8081'
+    depends_on:
+      redis:
+        condition: service_healthy

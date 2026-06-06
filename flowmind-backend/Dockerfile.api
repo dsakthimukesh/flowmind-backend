@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────────────────────────
+# Dockerfile.api — FlowMind API Server
+#
+# Uses Node 22 Alpine for a minimal footprint (~60MB base).
+# pnpm is enabled via corepack (built into Node.js ≥ 16.10).
+# In production, swap CMD to run the compiled dist/ output.
+# ─────────────────────────────────────────────────────────────────
+
+FROM node:22-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Enable pnpm via corepack (avoids an extra RUN layer for npm install -g pnpm)
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Copy package manifests first — Docker caches this layer separately.
+# Dependencies are only re-installed when package.json / lockfile changes,
+# not on every source file change. Critical for fast rebuilds.
+COPY package.json pnpm-lock.yaml ./
+
+# Install dependencies (frozen lockfile ensures reproducible installs)
+RUN pnpm install --frozen-lockfile
+
+# Copy the rest of the source (after deps to maximize cache hits)
+COPY . .
+
+# Expose the API port (matches PORT env variable default)
+EXPOSE 4000
+
+# Development: run tsx in watch mode for hot reload
+# Production: replace with `node dist/server.js` after `pnpm build`
+CMD ["pnpm", "dev"]

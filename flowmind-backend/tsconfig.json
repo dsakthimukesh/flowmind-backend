@@ -1,0 +1,46 @@
+{
+  "compilerOptions": {
+    // Target modern Node.js — ES2022 gives us top-level await, class fields, etc.
+    "target": "ES2022",
+
+    // NodeNext aligns with package.json "type": "module".
+    // It enforces .js extensions on imports and uses Node's native ESM resolution.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    // Strict mode catches real bugs: null checks, implicit any, etc.
+    "strict": true,
+
+    // Required for ESM interop with CommonJS packages (express, pino, etc.)
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+
+    // Emit source maps for production debugging (e.g., Sentry stack traces)
+    "sourceMap": true,
+
+    // Decorator support for future use (e.g., class-validator, typeorm patterns)
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    "types": ["node"],
+
+    // Path aliases — use @/ to reference src/ root
+    // e.g. import { env } from '@/config/env.js'
+    // baseUrl is deprecated in TS 6.0 for non-module-resolution use,
+    // but still required when using `paths`. Silenced with ignoreDeprecations.
+    "ignoreDeprecations": "6.0",
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

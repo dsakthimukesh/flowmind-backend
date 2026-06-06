@@ -1,0 +1,11 @@
+# pnpm-workspace.yaml
+# pnpm v11 uses `allowBuilds` (map of name → true/false) to control
+# which packages are permitted to run install-time build scripts.
+allowBuilds:
+  '@google/genai': true
+  '@prisma/engines': true
+  bcrypt: true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true
+  protobufjs: true

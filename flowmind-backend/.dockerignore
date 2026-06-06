@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────────────
+# .dockerignore — Controls what is sent to the Docker build context.
+#
+# Excluding node_modules and dist is the most important optimization:
+# - node_modules: will be installed fresh inside the container
+# - dist: will be compiled inside the container
+# Keeping the build context small speeds up `docker build` significantly.
+# ─────────────────────────────────────────────────────────────────
+
+# Dependencies (installed inside container)
+node_modules
+
+# Build output (compiled inside container)
+dist
+
+# Environment files (injected at runtime via env_file / secrets)
+.env
+.env.*
+!.env.example
+
+# Version control
+.git
+.gitignore
+
+# Editor configs
+.vscode
+.idea
+*.iml
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Docker files themselves (no need to copy into image)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Test artifacts
+coverage
+*.test.ts
+*.spec.ts

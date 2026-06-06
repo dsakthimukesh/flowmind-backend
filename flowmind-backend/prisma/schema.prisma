@@ -1,0 +1,391 @@
+// FlowMind AI — Prisma Schema
+//
+// DESIGN DECISIONS:
+// - Multi-tenancy: every resource scoped to Organization
+// - RBAC: roles live on OrganizationMember (per-org, not per-user)
+// - Soft deletes: deletedAt on all entities — never hard delete business data
+// - UUID PKs: prevent enumeration attacks, allow client-side ID generation
+// - No plaintext passwords: `password` stores bcrypt hash only
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+/// RBAC roles — stored on OrganizationMember so a user can have
+/// different roles in different organizations.
+enum OrgRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum PlanType {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+enum DocumentStatus {
+  PENDING    // uploaded, awaiting processing
+  PROCESSING // chunking + embedding in progress
+  READY      // indexed and searchable
+  FAILED     // processing error
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+/// Core identity model. Intentionally lean — profile data goes in a
+/// separate Profile model when needed (Phase 5+).
+model User {
+  id        String     @id @default(uuid()) @db.Uuid
+  email     String     @unique
+  password  String     // bcrypt hash — NEVER return this field in API responses
+  firstName String
+  lastName  String
+  status    UserStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // null = active, set = soft-deleted
+
+  // Relations
+  orgs     OrganizationMember[]
+  sessions Session[]
+
+  @@index([email])
+  @@map("users")
+}
+
+/// Refresh token sessions — enables multi-device logout and token rotation.
+/// One row per active device/session.
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  refreshToken String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshToken])
+  @@map("sessions")
+}
+
+/// Top-level billing and access boundary.
+/// Every AI workflow and resource will be scoped to an org.
+model Organization {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String    @unique // URL-safe: app.flowmind.ai/org/acme
+  plan      PlanType  @default(FREE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  members        OrganizationMember[]
+  workflows      Workflow[]
+  knowledgeBases KnowledgeBase[]
+  apiKeys        ApiKey[]
+  invitations    Invitation[]
+  auditLogs      AuditLog[]
+  schedules      WorkflowSchedule[]
+
+  @@index([slug])
+  @@map("organizations")
+}
+
+/// User ↔ Organization join table with per-org role.
+/// A user can be OWNER of org A and MEMBER of org B simultaneously.
+model OrganizationMember {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  organizationId String   @db.Uuid
+  role           OrgRole  @default(MEMBER)
+  joinedAt       DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("organization_members")
+}
+
+/// An AI workflow definition owned by an organization.
+/// A workflow has many versions — the published version is what executes.
+model Workflow {
+  id             String         @id @default(uuid()) @db.Uuid
+  organizationId String         @db.Uuid
+  name           String
+  description    String?
+  status         WorkflowStatus @default(DRAFT)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  versions     WorkflowVersion[]
+  executions   WorkflowExecution[]
+  schedules    WorkflowSchedule[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("workflows")
+}
+
+/// Immutable snapshot of a workflow's node graph at a point in time.
+/// Publishing creates a new version — existing executions are never mutated.
+model WorkflowVersion {
+  id          String   @id @default(uuid()) @db.Uuid
+  workflowId  String   @db.Uuid
+  version     Int      // monotonically incrementing: 1, 2, 3...
+  definition  Json     // node graph JSON — schema defined by the workflow engine
+  isPublished Boolean  @default(false)
+  publishedAt DateTime? // set when isPublished flips to true
+
+  createdAt DateTime @default(now())
+
+  workflow   Workflow            @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  executions WorkflowExecution[]
+
+  @@unique([workflowId, version])
+  @@index([workflowId])
+  @@index([workflowId, isPublished]) // fast lookup of the published version
+  @@map("workflow_versions")
+}
+
+/// A single run of a workflow version.
+/// Tracks execution lifecycle — populated by the worker process.
+model WorkflowExecution {
+  id                String          @id @default(uuid()) @db.Uuid
+  workflowId        String          @db.Uuid
+  workflowVersionId String          @db.Uuid
+  status            ExecutionStatus @default(PENDING)
+  triggeredBy       String          // userId who triggered the execution
+  startedAt         DateTime?
+  completedAt       DateTime?
+  errorMessage      String?         // populated when status = FAILED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workflow        Workflow        @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  workflowVersion WorkflowVersion @relation(fields: [workflowVersionId], references: [id])
+  logs            ExecutionLog[]
+
+  @@index([workflowId])
+  @@index([workflowVersionId])
+  @@index([status])
+  @@index([workflowId, status])
+  @@map("workflow_executions")
+}
+
+/// Structured log entry for a single execution event.
+/// Append-only — never updated or deleted. Scoped to execution.
+model ExecutionLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  executionId String    @db.Uuid
+  nodeId      String?   // null for execution-level events (started, completed)
+  level       LogLevel  @default(INFO)
+  message     String
+  metadata    Json?     // arbitrary structured data (duration, nodeType, error, etc.)
+
+  createdAt DateTime @default(now())
+
+  execution WorkflowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId])
+  @@index([executionId, level])
+  @@map("execution_logs")
+}
+
+/// A named collection of documents for RAG retrieval.
+/// Scoped to an organization — cross-org access is impossible by design.
+model KnowledgeBase {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  description    String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documents    Document[]
+
+  @@index([organizationId])
+  @@map("knowledge_bases")
+}
+
+/// A single uploaded file attached to a KnowledgeBase.
+/// Parsing and chunking happen asynchronously via the indexing queue.
+model Document {
+  id              String         @id @default(uuid()) @db.Uuid
+  knowledgeBaseId String         @db.Uuid
+  fileName        String         // original filename from upload
+  mimeType        String         // e.g. "application/pdf", "text/plain"
+  fileSize        Int            // bytes
+  storageKey      String         // key/path in storage backend
+  status          DocumentStatus @default(PENDING)
+  errorMessage    String?        // populated on FAILED status
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  knowledgeBase KnowledgeBase   @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  chunks        DocumentChunk[]
+
+  @@index([knowledgeBaseId])
+  @@index([knowledgeBaseId, status])
+  @@map("documents")
+}
+
+/// A text chunk derived from a Document.
+/// embeddingId stores the external vector ID (pgvector row id or Pinecone ID).
+/// The actual vector is stored in the vector store, not in this table.
+model DocumentChunk {
+  id          String  @id @default(uuid()) @db.Uuid
+  documentId  String  @db.Uuid
+  chunkIndex  Int     // position within the document (0-based)
+  content     String  // raw text of this chunk
+  tokenCount  Int     // approximate token count for context window management
+  embeddingId String? // reference to the vector in the vector store
+
+  createdAt DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@map("document_chunks")
+}
+
+model ApiKey {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
+  name           String
+  keyHash        String    @unique  // bcrypt hash of the actual key
+  keyPrefix      String             // first 8 chars shown in UI: "fm_live_"
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime  @default(now())
+  revokedAt      DateTime?
+  createdBy      String    @db.Uuid
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("api_keys")
+}
+
+model Invitation {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
+  email          String
+  role           OrgRole   @default(MEMBER)
+  token          String    @unique  // secure random token
+  invitedBy      String    @db.Uuid
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([token])
+  @@map("invitations")
+}
+
+enum AuditAction {
+  USER_LOGIN
+  USER_REGISTER
+  USER_LOGOUT
+  API_KEY_CREATED
+  API_KEY_REVOKED
+  MEMBER_INVITED
+  MEMBER_REMOVED
+  MEMBER_ROLE_UPDATED
+  WORKFLOW_CREATED
+  WORKFLOW_PUBLISHED
+  WORKFLOW_EXECUTED
+  ORG_CREATED
+  ORG_UPDATED
+}
+
+model AuditLog {
+  id             String      @id @default(uuid()) @db.Uuid
+  organizationId String      @db.Uuid
+  userId         String?     @db.Uuid
+  action         AuditAction
+  resourceType   String?
+  resourceId     String?
+  metadata       Json?
+  ipAddress      String?
+  createdAt      DateTime    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model WorkflowSchedule {
+  id             String   @id @default(uuid()) @db.Uuid
+  workflowId     String   @db.Uuid
+  organizationId String   @db.Uuid
+  cronExpression String
+  enabled        Boolean  @default(true)
+  timezone       String   @default("UTC")
+  createdBy      String   @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workflow     Workflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@index([organizationId])
+  @@map("workflow_schedules")
+}
