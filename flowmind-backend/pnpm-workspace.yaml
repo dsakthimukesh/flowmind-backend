@@ -1,6 +1,10 @@
 # pnpm-workspace.yaml
-# pnpm v11 uses `allowBuilds` (map of name → true/false) to control
-# which packages are permitted to run install-time build scripts.
+# Single-package project — "packages" must be present for pnpm v11 workspace compatibility.
+# The dot entry tells pnpm this directory itself is the only package.
+packages:
+  - '.'
+
+# pnpm v11: allow native modules to run install-time build scripts
 allowBuilds:
   '@google/genai': true
   '@prisma/engines': true
