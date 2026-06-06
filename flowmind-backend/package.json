@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "FlowMind AI — Backend API Server",
   "main": "dist/server.js",
+  "packageManager": "pnpm@11.5.2",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "worker:dev": "tsx watch src/workers/index.ts",
@@ -21,13 +22,6 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.5.1",
-      "onFail": "download"
-    }
-  },
   "type": "module",
   "dependencies": {
     "@google/genai": "^2.7.0",
