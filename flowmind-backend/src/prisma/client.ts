@@ -1,44 +1,39 @@
 /**
  * src/prisma/client.ts — Prisma Client Singleton
  *
- * WHY SINGLETON:
- * Prisma Client maintains a connection pool internally. In development with
- * hot reload (tsx --watch), every file change re-evaluates modules, which would
- * create a new PrismaClient instance — and therefore a new connection pool —
- * on every save. This quickly exhausts PostgreSQL's max_connections (default: 100).
+ * Prisma v7 uses engine type "client" which requires an explicit database
+ * adapter. We use @prisma/adapter-pg (the official pg/postgres.js adapter).
  *
- * The solution: store the client on globalThis in development so it survives
- * hot reloads. In production, the module cache ensures a single instance anyway.
- *
- * This is the official Prisma recommendation for Next.js/Node.js with hot reload.
+ * The adapter reads DATABASE_URL from the environment. The globalThis guard
+ * prevents connection pool exhaustion during hot-reload in development.
  */
 
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/client.js';
 
-// Declare the globalThis extension for TypeScript
 declare global {
   // eslint-disable-next-line no-var
   var __prisma: PrismaClient | undefined;
 }
 
-// ─── Client Factory ──────────────────────────────────────────────────────────
-
 function createPrismaClient(): PrismaClient {
-  // Prisma v7 requires options to be passed.
-  // The datasource URL is resolved from DATABASE_URL env var via prisma.config.ts.
-  // Query logging can be enabled at runtime via: DEBUG=prisma:query pnpm dev
-  const client = new PrismaClient({} as any);
+  const connectionString = process.env['DATABASE_URL'];
 
-  return client;
+  if (!connectionString) {
+    throw new Error('DATABASE_URL environment variable is not set');
+  }
+
+  // PrismaPg creates a connection pool using the pg library.
+  // Pool size defaults to 10 — tune via DATABASE_URL parameters if needed.
+  const adapter = new PrismaPg({ connectionString });
+
+  return new PrismaClient({ adapter });
 }
-
-// ─── Singleton Export ─────────────────────────────────────────────────────────
 
 export const prisma: PrismaClient =
   globalThis.__prisma ?? createPrismaClient();
 
 if (process.env['NODE_ENV'] !== 'production') {
-  // Persist across hot reloads in development only
   globalThis.__prisma = prisma;
 }
 
