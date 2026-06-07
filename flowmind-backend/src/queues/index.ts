@@ -16,18 +16,40 @@
  * separate processes.
  */
 
-import { Queue } from 'bullmq';
+import { Queue, type ConnectionOptions } from 'bullmq';
 import { QUEUE_NAMES } from './queue-names.js';
 import { createLogger } from '../common/logger.js';
+import { env } from '../config/env.js';
 
 const log = createLogger('queues');
 
 // ─── Shared BullMQ Connection Config ─────────────────────────────────────────
 
-export const bullmqConnection = {
-  host: process.env['REDIS_HOST'] ?? 'localhost',
-  port: parseInt(process.env['REDIS_PORT'] ?? '6379', 10),
-};
+export const bullmqConnection: ConnectionOptions = parseBullMQConnection();
+
+function parseBullMQConnection(): ConnectionOptions {
+  const redisUrl = env.REDIS_URL ? new URL(env.REDIS_URL) : null;
+
+  const protocol = redisUrl?.protocol ?? (env.REDIS_TLS ? 'rediss:' : 'redis:');
+  const password = redisUrl?.password
+    ? decodeURIComponent(redisUrl.password)
+    : env.REDIS_PASSWORD;
+  const username = redisUrl?.username
+    ? decodeURIComponent(redisUrl.username)
+    : env.REDIS_USERNAME;
+  const db = redisUrl?.pathname && redisUrl.pathname !== '/'
+    ? Number(redisUrl.pathname.slice(1))
+    : env.REDIS_DB;
+
+  return {
+    host: redisUrl?.hostname ?? env.REDIS_HOST,
+    port: redisUrl?.port ? Number(redisUrl.port) : env.REDIS_PORT,
+    username,
+    password,
+    db: Number.isFinite(db) ? db : 0,
+    ...(protocol === 'rediss:' ? { tls: {} } : {}),
+  };
+}
 
 // ─── Queue Instances ──────────────────────────────────────────────────────────
 

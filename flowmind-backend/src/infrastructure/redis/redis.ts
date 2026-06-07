@@ -27,6 +27,7 @@
 
 import { createClient, type RedisClientType } from 'redis';
 import { createLogger } from '../../common/logger.js';
+import { env } from '../../config/env.js';
 
 const log = createLogger('redis');
 
@@ -40,9 +41,9 @@ declare global {
 // ─── Client Factory ───────────────────────────────────────────────────────────
 
 function createRedisClient(): RedisClientType {
-  const host = process.env['REDIS_HOST'] ?? 'localhost';
-  const port = process.env['REDIS_PORT'] ?? '6379';
-  const url = `redis://${host}:${port}`;
+  const host = env.REDIS_HOST;
+  const port = String(env.REDIS_PORT);
+  const url = env.REDIS_URL ?? buildRedisUrl();
 
   const client = createClient({ url }) as RedisClientType;
 
@@ -65,6 +66,23 @@ function createRedisClient(): RedisClientType {
   });
 
   return client;
+}
+
+function buildRedisUrl(): string {
+  const protocol = env.REDIS_TLS ? 'rediss' : 'redis';
+  const auth = buildRedisAuth();
+  const db = env.REDIS_DB > 0 ? `/${env.REDIS_DB}` : '';
+
+  return `${protocol}://${auth}${env.REDIS_HOST}:${env.REDIS_PORT}${db}`;
+}
+
+function buildRedisAuth(): string {
+  if (!env.REDIS_PASSWORD) return '';
+
+  const password = encodeURIComponent(env.REDIS_PASSWORD);
+  if (!env.REDIS_USERNAME) return `:${password}@`;
+
+  return `${encodeURIComponent(env.REDIS_USERNAME)}:${password}@`;
 }
 
 // ─── Singleton Export ─────────────────────────────────────────────────────────

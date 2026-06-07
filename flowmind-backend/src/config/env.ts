@@ -13,6 +13,22 @@
 
 import { z } from 'zod';
 
+const optionalEnvString = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  z.string().optional(),
+);
+
+const optionalEnvUrl = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  z.string().url().optional(),
+);
+
+const envBoolean = z.preprocess((value) => {
+  if (value === undefined || value === '') return undefined;
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  return value;
+}, z.boolean().default(false));
+
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
 const envSchema = z.object({
@@ -24,8 +40,13 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url('DATABASE_URL must be a valid PostgreSQL connection URL'),
 
   // Redis
-  REDIS_HOST: z.string().min(1, 'REDIS_HOST is required'),
+  REDIS_URL: optionalEnvUrl,
+  REDIS_HOST: z.string().min(1, 'REDIS_HOST is required').default('localhost'),
   REDIS_PORT: z.coerce.number().int().positive().default(6379),
+  REDIS_USERNAME: optionalEnvString,
+  REDIS_PASSWORD: optionalEnvString,
+  REDIS_DB: z.coerce.number().int().nonnegative().default(0),
+  REDIS_TLS: envBoolean,
 
   // Auth
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters for security'),
