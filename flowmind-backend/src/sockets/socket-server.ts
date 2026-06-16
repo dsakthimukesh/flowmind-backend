@@ -51,7 +51,7 @@ export function initSocketServer(httpServer: HttpServer): Server {
     cors: {
       origin:
         process.env['NODE_ENV'] === 'production'
-          ? process.env['FRONTEND_URL'] ?? 'https://app.flowmind.ai'
+          ? process.env['FRONTEND_URL'] ?? 'https://flowmind-frontend-seven.vercel.app'
           : ['http://localhost:3000', 'http://localhost:5173'],
       credentials: true,
     },
