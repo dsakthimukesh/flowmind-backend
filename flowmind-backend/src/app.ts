@@ -37,7 +37,7 @@ export function createApp(): express.Application {
   // ── CORS ──────────────────────────────────────────────────────────────────
   const allowedOrigins =
     env.NODE_ENV === 'production'
-      ? [process.env['FRONTEND_URL'] ?? 'https://app.flowmind.ai']
+      ? [process.env['FRONTEND_URL'] ?? 'https://flowmind-frontend-seven.vercel.app']
       : ['http://localhost:3000', 'http://localhost:5173'];
 
   app.use(cors({
