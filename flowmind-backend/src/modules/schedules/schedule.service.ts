@@ -11,6 +11,42 @@ import { workflowQueue } from '../../queues/index.js';
 /** BullMQ job name used for scheduled workflow executions. */
 const SCHEDULED_JOB_NAME = 'scheduled-workflow';
 
+export interface WorkflowScheduleView {
+  id: string;
+  workflowId: string;
+  organizationId: string;
+  cronExpression: string;
+  timezone: string;
+  status: 'ENABLED' | 'DISABLED';
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function toScheduleView(s: {
+  id: string;
+  workflowId: string;
+  organizationId: string;
+  cronExpression: string;
+  timezone: string;
+  enabled: boolean;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}): WorkflowScheduleView {
+  return {
+    id: s.id,
+    workflowId: s.workflowId,
+    organizationId: s.organizationId,
+    cronExpression: s.cronExpression,
+    timezone: s.timezone,
+    status: s.enabled ? 'ENABLED' : 'DISABLED',
+    createdBy: s.createdBy,
+    createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
+  };
+}
+
 function repeatKey(scheduleId: string): string {
   return `schedule:${scheduleId}`;
 }
@@ -21,7 +57,7 @@ export async function createWorkflowSchedule(
   cronExpression: string,
   timezone: string,
   createdBy: string,
-) {
+): Promise<WorkflowScheduleView> {
   const workflow = await findWorkflowByIdAndOrg(workflowId, organizationId);
   if (!workflow) throw new NotFoundError('Workflow');
   if (workflow.status !== 'ACTIVE') {
@@ -42,11 +78,15 @@ export async function createWorkflowSchedule(
     },
   );
 
-  return schedule;
+  return toScheduleView(schedule);
 }
 
-export async function listWorkflowSchedules(workflowId: string, organizationId: string) {
-  return findSchedulesByWorkflow(workflowId, organizationId);
+export async function listWorkflowSchedules(
+  workflowId: string,
+  organizationId: string,
+): Promise<WorkflowScheduleView[]> {
+  const schedules = await findSchedulesByWorkflow(workflowId, organizationId);
+  return schedules.map(toScheduleView);
 }
 
 export async function removeWorkflowSchedule(

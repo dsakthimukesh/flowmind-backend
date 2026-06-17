@@ -14,6 +14,7 @@ import {
   createVersion,
   publishVersion,
 } from './workflow.repository.js';
+import { prisma } from '../../prisma/prisma.js';
 import type { CreateWorkflowInput, CreateVersionInput } from './workflow.validation.js';
 
 // ─── View type — safe to return from API ─────────────────────────────────────
@@ -26,17 +27,21 @@ export interface WorkflowView {
   status: string;
   createdAt: Date;
   updatedAt: Date;
+  publishedVersionId: string | null;
 }
 
-function toView(w: {
-  id: string;
-  organizationId: string;
-  name: string;
-  description: string | null;
-  status: string;
-  createdAt: Date;
-  updatedAt: Date;
-}): WorkflowView {
+function toView(
+  w: {
+    id: string;
+    organizationId: string;
+    name: string;
+    description: string | null;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+  },
+  publishedVersionId: string | null = null,
+): WorkflowView {
   return {
     id: w.id,
     organizationId: w.organizationId,
@@ -45,6 +50,7 @@ function toView(w: {
     status: w.status,
     createdAt: w.createdAt,
     updatedAt: w.updatedAt,
+    publishedVersionId,
   };
 }
 
@@ -64,7 +70,16 @@ export async function createNewWorkflow(
 
 export async function listWorkflows(organizationId: string): Promise<WorkflowView[]> {
   const workflows = await findWorkflowsByOrg(organizationId);
-  return workflows.map(toView);
+  const publishedVersions = await prisma.workflowVersion.findMany({
+    where: {
+      workflowId: { in: workflows.map((w) => w.id) },
+      isPublished: true,
+    },
+    select: { workflowId: true, id: true },
+  });
+
+  const versionMap = new Map(publishedVersions.map((v) => [v.workflowId, v.id]));
+  return workflows.map((w) => toView(w, versionMap.get(w.id) || null));
 }
 
 export async function getWorkflow(
@@ -73,7 +88,9 @@ export async function getWorkflow(
 ): Promise<WorkflowView> {
   const workflow = await findWorkflowByIdAndOrg(id, organizationId);
   if (!workflow) throw new NotFoundError('Workflow');
-  return toView(workflow);
+
+  const published = await findPublishedVersion(id);
+  return toView(workflow, published?.id || null);
 }
 
 // ─── Version view type ────────────────────────────────────────────────────────

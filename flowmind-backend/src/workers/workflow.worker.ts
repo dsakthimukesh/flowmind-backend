@@ -7,7 +7,7 @@
 
 import { Worker, type Job } from 'bullmq';
 import { QUEUE_NAMES } from '../queues/queue-names.js';
-import { bullmqConnection } from '../queues/index.js';
+import { bullmqConnection, workflowQueue } from '../queues/index.js';
 import {
   markExecutionRunning,
   markExecutionSuccess,
@@ -34,6 +34,39 @@ interface WorkflowJobData {
 }
 
 async function processWorkflowJob(job: Job<WorkflowJobData>): Promise<void> {
+  if (job.name === 'scheduled-workflow') {
+    const { workflowId, organizationId } = job.data as any;
+    log.info({ jobId: job.id, workflowId }, 'Scheduled workflow job received');
+
+    // 1. Find published version
+    const publishedVersion = await prisma.workflowVersion.findFirst({
+      where: { workflowId, isPublished: true },
+    });
+    if (!publishedVersion) {
+      log.warn({ workflowId }, 'Scheduled workflow run failed: No published version found');
+      return;
+    }
+
+    // 2. Create the execution record
+    const execution = await prisma.workflowExecution.create({
+      data: {
+        workflowId,
+        workflowVersionId: publishedVersion.id,
+        triggeredBy: 'scheduler',
+        status: 'PENDING',
+      },
+    });
+
+    // 3. Enqueue execute-workflow job
+    await workflowQueue.add('execute-workflow', {
+      executionId: execution.id,
+      workflowId,
+      workflowVersionId: publishedVersion.id,
+      organizationId,
+    });
+    return;
+  }
+
   const { executionId, workflowVersionId, workflowId, organizationId } = job.data;
 
   log.info({ jobId: job.id, executionId }, 'Workflow job received');
