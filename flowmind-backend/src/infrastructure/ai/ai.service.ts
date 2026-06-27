@@ -11,6 +11,7 @@
 
 import type { AiProvider } from './ai-provider.interface.js';
 import { getGeminiProvider } from './providers/gemini.provider.js';
+import { getGroqProvider } from './providers/groq.provider.js';
 
 export type {
   GenerateTextOptions,
@@ -22,14 +23,18 @@ export type {
 } from './ai-provider.interface.js';
 
 function resolveProvider(): AiProvider {
-  // Priority: Gemini → (future) OpenAI
+  // Priority: Groq → Gemini → (future) OpenAI
+  if (process.env['GROQ_API_KEY']) {
+    return getGroqProvider();
+  }
+
   if (process.env['GEMINI_API_KEY']) {
     return getGeminiProvider();
   }
 
   // Fallback error — no provider configured
   throw new Error(
-    'No AI provider configured. Set GEMINI_API_KEY in your environment.',
+    'No AI provider configured. Set GROQ_API_KEY or GEMINI_API_KEY in your environment.',
   );
 }
 
