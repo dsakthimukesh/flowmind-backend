@@ -98,10 +98,14 @@ export async function removeWorkflowSchedule(
   if (!schedule || schedule.workflowId !== workflowId) throw new NotFoundError('Schedule');
 
   // Remove BullMQ repeatable job
-  await workflowQueue.removeRepeatable(SCHEDULED_JOB_NAME, {
-    pattern: schedule.cronExpression,
-    tz: schedule.timezone,
-  });
+  await workflowQueue.removeRepeatable(
+    SCHEDULED_JOB_NAME,
+    {
+      pattern: schedule.cronExpression,
+      tz: schedule.timezone,
+    },
+    repeatKey(schedule.id),
+  );
 
   await deleteSchedule(scheduleId, organizationId);
 }

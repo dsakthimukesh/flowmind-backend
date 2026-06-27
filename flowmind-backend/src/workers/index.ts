@@ -17,8 +17,39 @@ import { createAiWorker } from './ai.worker.js';
 import { createEmailWorker } from './email.worker.js';
 import { createDocumentIndexingWorker } from './document-indexing.worker.js';
 
+import { workflowQueue } from '../queues/index.js';
+import { prisma } from '../prisma/client.js';
+
+async function cleanOrphanedSchedules(): Promise<void> {
+  const repeatableJobs = await workflowQueue.getRepeatableJobs();
+  const dbSchedules = await prisma.workflowSchedule.findMany({
+    select: { id: true },
+  });
+  const dbScheduleIds = new Set(dbSchedules.map((s) => s.id));
+
+  for (const job of repeatableJobs) {
+    if (job.name === 'scheduled-workflow') {
+      const match = job.id?.match(/^schedule:(.+)$/);
+      if (match) {
+        const scheduleId = match[1];
+        if (scheduleId && !dbScheduleIds.has(scheduleId)) {
+          logger.info({ scheduleId, key: job.key }, '🧹 Cleaning up orphaned repeatable job from Redis');
+          await workflowQueue.removeRepeatableByKey(job.key);
+        }
+      }
+    }
+  }
+}
+
 async function startWorkers(): Promise<void> {
   logger.info({ env: env.NODE_ENV, pid: process.pid }, '⚙️  Starting FlowMind workers');
+
+  // Clean up any orphaned schedules from Redis on start
+  try {
+    await cleanOrphanedSchedules();
+  } catch (err) {
+    logger.error({ err }, 'Failed to clean up orphaned schedules on startup');
+  }
 
   const workers = [
     createWorkflowWorker(),
