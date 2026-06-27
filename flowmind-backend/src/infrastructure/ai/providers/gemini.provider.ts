@@ -182,6 +182,8 @@ export function getGeminiProvider(): GeminiProvider {
     );
   }
 
+  log.info({ keyPrefix: apiKey.substring(0, 7) + '...' }, 'Initializing GeminiProvider');
+
   _instance = new GeminiProvider(apiKey);
   return _instance;
 }
