@@ -74,6 +74,7 @@ export async function triggerExecution(
   workflowId: string,
   organizationId: string,
   triggeredBy: string,
+  payload: Record<string, any> = {},
 ): Promise<TriggerExecutionResult> {
   // Org-scoped workflow lookup
   const workflow = await findWorkflowByIdAndOrg(workflowId, organizationId);
@@ -113,6 +114,7 @@ export async function triggerExecution(
     workflowId,
     workflowVersionId: publishedVersion.id,
     organizationId,
+    inputData: payload,
   });
 
   return { execution: toView(execution), jobId: job.id };

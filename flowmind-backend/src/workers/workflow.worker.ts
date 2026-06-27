@@ -31,6 +31,7 @@ interface WorkflowJobData {
   workflowId: string;
   workflowVersionId: string;
   organizationId: string;
+  inputData?: Record<string, any>;
 }
 
 async function processWorkflowJob(job: Job<WorkflowJobData>): Promise<void> {
@@ -67,7 +68,7 @@ async function processWorkflowJob(job: Job<WorkflowJobData>): Promise<void> {
     return;
   }
 
-  const { executionId, workflowVersionId, workflowId, organizationId } = job.data;
+  const { executionId, workflowVersionId, workflowId, organizationId, inputData } = job.data;
 
   log.info({ jobId: job.id, executionId }, 'Workflow job received');
 
@@ -94,7 +95,7 @@ async function processWorkflowJob(job: Job<WorkflowJobData>): Promise<void> {
       executionId,
       workflowId,
       organizationId,
-      data: {},
+      data: inputData || {},
       logs: [],
       emit: (event, payload) => {
         // Write structured DB log for node events

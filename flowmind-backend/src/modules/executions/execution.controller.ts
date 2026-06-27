@@ -14,7 +14,8 @@ import { NotFoundError } from '../../common/errors/index.js';
 export async function triggerExecution(req: Request, res: Response): Promise<void> {
   const { sub: userId, organizationId } = getRequestUser(req);
   const workflowId = String(req.params['id']);
-  const result = await executionService.triggerExecution(workflowId, organizationId, userId);
+  const payload = req.body || {};
+  const result = await executionService.triggerExecution(workflowId, organizationId, userId, payload);
   res.status(202).json(successResponse('Execution triggered', {
     execution: result.execution, jobId: result.jobId,
   }));
