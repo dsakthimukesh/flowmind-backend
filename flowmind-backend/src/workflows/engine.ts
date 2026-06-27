@@ -39,14 +39,56 @@ export interface EngineResult {
 }
 
 export async function executeWorkflow(
-  definition: WorkflowDefinition,
+  definition: any,
   context: ExecutionContext,
 ): Promise<EngineResult> {
+  // If the definition is in React Flow format (nodes + edges), compile it to the engine's format
+  let compiledDefinition: WorkflowDefinition;
+
+  if (definition && !('startNodeId' in definition) && 'edges' in definition) {
+    const startNode = definition.nodes.find((n: any) => n.type === 'START');
+    if (!startNode) {
+      const error = 'START node not found in workflow definition';
+      log.error({ executionId: context.executionId }, error);
+      return { success: false, logs: context.logs, error };
+    }
+
+    const workflowNodes: WorkflowNode[] = definition.nodes.map((node: any) => {
+      const wNode: WorkflowNode = {
+        id: node.id,
+        type: node.type,
+        name: node.data?.label || node.name || '',
+        config: node.data?.config || node.config || {},
+      };
+
+      const outgoingEdges = definition.edges.filter((e: any) => e.source === node.id);
+
+      if (node.type === 'CONDITION') {
+        const trueEdge = outgoingEdges.find((e: any) => e.sourceHandle === 'true');
+        const falseEdge = outgoingEdges.find((e: any) => e.sourceHandle === 'false');
+        wNode.trueNextNodeId = trueEdge?.target;
+        wNode.falseNextNodeId = falseEdge?.target;
+      } else {
+        const defaultEdge = outgoingEdges[0];
+        wNode.nextNodeId = defaultEdge?.target;
+      }
+
+      return wNode;
+    });
+
+    compiledDefinition = {
+      startNodeId: startNode.id,
+      nodes: workflowNodes,
+    };
+  } else {
+    compiledDefinition = definition;
+  }
+
   const nodeMap = new Map<string, WorkflowNode>(
-    definition.nodes.map((n) => [n.id, n]),
+    compiledDefinition.nodes.map((n) => [n.id, n]),
   );
 
-  let currentNodeId: string | null | undefined = definition.startNodeId;
+  let currentNodeId: string | null | undefined = compiledDefinition.startNodeId;
   const visited = new Set<string>();
   let stepCount = 0;
 
@@ -120,6 +162,7 @@ export async function executeWorkflow(
         nodeName: node.name,
         nodeType: node.type,
         durationMs: entry.durationMs,
+        output: result.output,
       });
 
       // Determine next node

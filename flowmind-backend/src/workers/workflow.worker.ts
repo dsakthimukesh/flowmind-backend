@@ -105,8 +105,19 @@ async function processWorkflowJob(job: Job<WorkflowJobData>): Promise<void> {
           void logInfo(executionId, organizationId, `Node started: ${p['nodeName']}`,
             { nodeType: p['nodeType'] }, nodeId);
         } else if (event === 'node.completed') {
-          void logInfo(executionId, organizationId, `Node completed: ${p['nodeName']}`,
-            { nodeType: p['nodeType'], durationMs: p['durationMs'] }, nodeId);
+          let outputSummary = '';
+          if (p['output'] && typeof p['output'] === 'object') {
+            const out = { ...p['output'] as any };
+            delete out._meta; // hide raw meta in console log string for cleaner display
+            outputSummary = `\nOutput: ${JSON.stringify(out, null, 2)}`;
+          }
+          void logInfo(
+            executionId,
+            organizationId,
+            `Node completed: ${p['nodeName']}${outputSummary}`,
+            { nodeType: p['nodeType'], durationMs: p['durationMs'], output: p['output'] },
+            nodeId,
+          );
         } else if (event === 'node.failed') {
           void logError(executionId, organizationId, `Node failed: ${p['nodeName']}`,
             { nodeType: p['nodeType'], error: p['error'], durationMs: p['durationMs'] }, nodeId);
