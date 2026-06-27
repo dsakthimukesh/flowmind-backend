@@ -36,6 +36,10 @@ async function cleanOrphanedSchedules(): Promise<void> {
           logger.info({ scheduleId, key: job.key }, '🧹 Cleaning up orphaned repeatable job from Redis');
           await workflowQueue.removeRepeatableByKey(job.key);
         }
+      } else {
+        // Wipes out old or malformed repeatable jobs from older versions of your code
+        logger.info({ key: job.key, jobId: job.id }, '🧹 Cleaning up older/malformed repeatable job from Redis');
+        await workflowQueue.removeRepeatableByKey(job.key);
       }
     }
   }
