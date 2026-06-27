@@ -65,7 +65,8 @@ export class GeminiProvider implements AiProvider {
       };
     } catch (err) {
       log.error({ err }, 'Gemini generateText failed');
-      throw new AppError('AI generation failed', 502, 'AI_PROVIDER_ERROR');
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new AppError(`AI generation failed: ${msg}`, 502, 'AI_PROVIDER_ERROR');
     }
   }
 
@@ -110,7 +111,8 @@ export class GeminiProvider implements AiProvider {
       };
     } catch (err) {
       log.error({ err }, 'Gemini chat failed');
-      throw new AppError('AI chat failed', 502, 'AI_PROVIDER_ERROR');
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new AppError(`AI chat failed: ${msg}`, 502, 'AI_PROVIDER_ERROR');
     }
   }
 
@@ -158,7 +160,8 @@ export class GeminiProvider implements AiProvider {
       };
     } catch (err) {
       log.error({ err }, 'Gemini classify failed');
-      throw new AppError('AI classification failed', 502, 'AI_PROVIDER_ERROR');
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new AppError(`AI classification failed: ${msg}`, 502, 'AI_PROVIDER_ERROR');
     }
   }
 }
