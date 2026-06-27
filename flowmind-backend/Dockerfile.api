@@ -17,7 +17,7 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Copy package manifests first — Docker caches this layer separately.
 # Dependencies are only re-installed when package.json / lockfile changes,
 # not on every source file change. Critical for fast rebuilds.
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install dependencies (frozen lockfile ensures reproducible installs)
 RUN pnpm install --frozen-lockfile
