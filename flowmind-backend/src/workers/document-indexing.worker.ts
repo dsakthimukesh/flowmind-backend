@@ -40,12 +40,13 @@ async function processIndexingJob(job: Job<IndexingJobData>): Promise<void> {
       log.debug({ documentId }, 'Parsing PDF file content');
       // @ts-ignore
       const pdfParseModule = await import('pdf-parse');
-      // CommonJS modules wrapped in ESM can be the default property or the module namespace object itself
       // @ts-ignore
-      const pdfParse = pdfParseModule.default || pdfParseModule;
+      const PDFParseClass = pdfParseModule.PDFParse;
       // @ts-ignore
-      const parsedPdf = await pdfParse(fileBuffer);
-      rawText = parsedPdf.text || '';
+      const parserInstance = new PDFParseClass({ data: fileBuffer });
+      // @ts-ignore
+      const textResult = await parserInstance.getText();
+      rawText = textResult.text || '';
     } else {
       rawText = fileBuffer.toString('utf-8');
     }
