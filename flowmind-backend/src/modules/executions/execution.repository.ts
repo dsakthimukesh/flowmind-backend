@@ -17,10 +17,19 @@ type Execution = WorkflowExecutionModel;
  */
 export async function findExecutionsByOrg(
   organizationId: string,
+  workflowId?: string,
   limit = 50,
 ): Promise<any[]> {
+  const where: any = {
+    workflow: { organizationId, deletedAt: null },
+  };
+
+  if (workflowId) {
+    where.workflowId = workflowId;
+  }
+
   return prisma.workflowExecution.findMany({
-    where: { workflow: { organizationId, deletedAt: null } },
+    where,
     include: { workflow: { select: { name: true } } },
     orderBy: { createdAt: 'desc' },
     take: limit,

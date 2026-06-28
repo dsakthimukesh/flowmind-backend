@@ -18,16 +18,18 @@ export async function findDocumentsByKB(
   });
 }
 
-/** Find a single document — scoped through KB to enforce org ownership. */
 export async function findDocumentByIdAndOrg(
   id: string,
   organizationId: string,
-): Promise<Document | null> {
+): Promise<any | null> {
   return prisma.document.findFirst({
     where: {
       id,
       deletedAt: null,
       knowledgeBase: { organizationId, deletedAt: null },
+    },
+    include: {
+      _count: { select: { chunks: true } },
     },
   });
 }

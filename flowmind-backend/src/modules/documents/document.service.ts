@@ -31,18 +31,22 @@ export interface DocumentView {
   errorMessage: string | null;
   createdAt: Date;
   updatedAt: Date;
+  chunkCount?: number;
 }
 
-function toView(d: {
-  id: string; knowledgeBaseId: string; fileName: string; mimeType: string;
-  fileSize: number; storageKey: string; status: string; errorMessage: string | null;
-  createdAt: Date; updatedAt: Date;
-}): DocumentView {
+function toView(d: any): DocumentView {
   return {
-    id: d.id, knowledgeBaseId: d.knowledgeBaseId, fileName: d.fileName,
-    mimeType: d.mimeType, fileSize: d.fileSize, storageKey: d.storageKey,
-    status: d.status, errorMessage: d.errorMessage,
-    createdAt: d.createdAt, updatedAt: d.updatedAt,
+    id: d.id,
+    knowledgeBaseId: d.knowledgeBaseId,
+    fileName: d.fileName,
+    mimeType: d.mimeType,
+    fileSize: d.fileSize,
+    storageKey: d.storageKey,
+    status: d.status,
+    errorMessage: d.errorMessage,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+    chunkCount: d._count?.chunks ?? 0,
   };
 }
 

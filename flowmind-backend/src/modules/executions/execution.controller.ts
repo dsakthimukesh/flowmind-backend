@@ -24,7 +24,8 @@ export async function triggerExecution(req: Request, res: Response): Promise<voi
 // GET /api/v1/executions
 export async function listExecutions(req: Request, res: Response): Promise<void> {
   const { organizationId } = getRequestUser(req);
-  const executions = await executionService.listExecutions(organizationId);
+  const workflowId = req.query['workflowId'] ? String(req.query['workflowId']) : undefined;
+  const executions = await executionService.listExecutions(organizationId, workflowId);
   res.status(200).json(successResponse('Executions fetched', { executions }));
 }
 

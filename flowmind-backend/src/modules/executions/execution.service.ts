@@ -113,8 +113,11 @@ export async function triggerExecution(
 
 // ─── Query executions ─────────────────────────────────────────────────────────
 
-export async function listExecutions(organizationId: string): Promise<ExecutionView[]> {
-  const executions = await findExecutionsByOrg(organizationId);
+export async function listExecutions(
+  organizationId: string,
+  workflowId?: string,
+): Promise<ExecutionView[]> {
+  const executions = await findExecutionsByOrg(organizationId, workflowId);
   return executions.map(toView);
 }
 

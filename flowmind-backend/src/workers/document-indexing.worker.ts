@@ -9,6 +9,8 @@
 import { Worker, type Job } from 'bullmq';
 import fs from 'fs/promises';
 import path from 'path';
+// @ts-ignore
+import pdfParse from 'pdf-parse';
 import { QUEUE_NAMES } from '../queues/queue-names.js';
 import { bullmqConnection } from '../queues/index.js';
 import { prisma } from '../prisma/prisma.js';
@@ -32,8 +34,18 @@ async function processIndexingJob(job: Job<IndexingJobData>): Promise<void> {
     const doc = await prisma.document.findUnique({ where: { id: documentId } });
     if (!doc) throw new Error(`Document not found: ${documentId}`);
 
-    // Read plain text (PDF/DOCX parsing added in future phase)
-    const rawText = await fs.readFile(path.join(UPLOADS_DIR, doc.storageKey), 'utf-8');
+    // Read and parse file based on mimeType (support PDF and plain text)
+    const fileBuffer = await fs.readFile(path.join(UPLOADS_DIR, doc.storageKey));
+    let rawText = '';
+
+    if (doc.mimeType === 'application/pdf') {
+      log.debug({ documentId }, 'Parsing PDF file content');
+      const parsedPdf = await pdfParse(fileBuffer);
+      rawText = parsedPdf.text || '';
+    } else {
+      rawText = fileBuffer.toString('utf-8');
+    }
+
     const chunks = chunkText(rawText, { chunkSize: 1000, overlap: 200 });
     log.debug({ documentId, chunkCount: chunks.length }, 'Text chunked');
 
