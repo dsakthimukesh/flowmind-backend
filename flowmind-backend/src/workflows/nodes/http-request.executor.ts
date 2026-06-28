@@ -33,10 +33,32 @@ function interpolate(value: string, data: Record<string, unknown>): string {
 export const httpRequestExecutor: NodeExecutor = async (node, context) => {
   const url       = interpolate(node.config['url'] as string, context.data);
   const method    = ((node.config['method'] as string) ?? 'GET').toUpperCase();
-  const headers   = (node.config['headers'] as Record<string, string>) ?? {};
-  const body      = node.config['body'];
   const timeoutMs = Math.min((node.config['timeoutMs'] as number) ?? 10_000, 30_000);
   const outputKey = (node.config['outputKey'] as string) ?? 'httpResponse';
+
+  // Interpolate headers
+  let headers = (node.config['headers'] as Record<string, string>) ?? {};
+  try {
+    const interpolatedHeaders = interpolate(JSON.stringify(headers), context.data);
+    headers = JSON.parse(interpolatedHeaders);
+  } catch (e) {
+    // Fallback if parsing fails
+  }
+
+  // Interpolate body if present
+  let body = node.config['body'];
+  if (body !== undefined) {
+    try {
+      if (typeof body === 'string') {
+        body = interpolate(body, context.data);
+      } else if (body !== null && typeof body === 'object') {
+        const interpolatedBody = interpolate(JSON.stringify(body), context.data);
+        body = JSON.parse(interpolatedBody);
+      }
+    } catch (e) {
+      // Fallback if parsing fails
+    }
+  }
 
   const config: AxiosRequestConfig = {
     url,
