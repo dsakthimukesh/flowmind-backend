@@ -13,6 +13,7 @@ import {
   findDocumentsByKB,
   findDocumentByIdAndOrg,
   createDocument,
+  deleteDocument as deleteDocumentRepo,
 } from './document.repository.js';
 import { getStorageProvider } from '../../infrastructure/storage/local-storage.provider.js';
 import { documentIndexingQueue, addJob } from '../../queues/index.js';
@@ -113,4 +114,21 @@ export async function getDocument(
   const doc = await findDocumentByIdAndOrg(id, organizationId);
   if (!doc) throw new NotFoundError('Document');
   return toView(doc);
+}
+
+export async function deleteDocument(
+  id: string,
+  organizationId: string,
+): Promise<void> {
+  const doc = await findDocumentByIdAndOrg(id, organizationId);
+  if (!doc) throw new NotFoundError('Document');
+
+  // Perform soft delete on the database
+  await deleteDocumentRepo(id);
+
+  // Clean up stored file
+  const storage = getStorageProvider();
+  await storage.delete(doc.storageKey);
+
+  log.info({ documentId: id }, 'Document deleted and storage file removed');
 }

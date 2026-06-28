@@ -18,5 +18,6 @@ const router = Router({ mergeParams: true });
 router.post('/', authorize(['OWNER', 'ADMIN', 'MEMBER']), asyncHandler(docController.uploadDocument));
 router.get('/', authorize(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']), asyncHandler(docController.listDocuments));
 router.get('/:id', authorize(['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']), asyncHandler(docController.getDocument));
+router.delete('/:id', authorize(['OWNER', 'ADMIN', 'MEMBER']), asyncHandler(docController.deleteDocument));
 
 export { router as documentRouter };

@@ -71,3 +71,11 @@ export async function getDocument(req: Request, res: Response): Promise<void> {
   const document = await docService.getDocument(id, organizationId);
   res.status(200).json(successResponse('Document fetched', { document }));
 }
+
+// DELETE /api/v1/knowledge-bases/:kbId/documents/:id
+export async function deleteDocument(req: Request, res: Response): Promise<void> {
+  const { organizationId } = getRequestUser(req);
+  const id = String(req.params['id']);
+  await docService.deleteDocument(id, organizationId);
+  res.status(200).json(successResponse('Document deleted successfully', {}));
+}

@@ -54,3 +54,10 @@ export async function createDocument(input: CreateDocumentInput): Promise<Docume
     },
   });
 }
+
+export async function deleteDocument(id: string): Promise<Document> {
+  return prisma.document.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  });
+}
