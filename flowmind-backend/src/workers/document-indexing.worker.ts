@@ -9,8 +9,6 @@
 import { Worker, type Job } from 'bullmq';
 import fs from 'fs/promises';
 import path from 'path';
-// @ts-ignore
-import pdfParse from 'pdf-parse';
 import { QUEUE_NAMES } from '../queues/queue-names.js';
 import { bullmqConnection } from '../queues/index.js';
 import { prisma } from '../prisma/prisma.js';
@@ -40,6 +38,12 @@ async function processIndexingJob(job: Job<IndexingJobData>): Promise<void> {
 
     if (doc.mimeType === 'application/pdf') {
       log.debug({ documentId }, 'Parsing PDF file content');
+      // @ts-ignore
+      const pdfParseModule = await import('pdf-parse');
+      // CommonJS modules wrapped in ESM can be the default property or the module namespace object itself
+      // @ts-ignore
+      const pdfParse = pdfParseModule.default || pdfParseModule;
+      // @ts-ignore
       const parsedPdf = await pdfParse(fileBuffer);
       rawText = parsedPdf.text || '';
     } else {
