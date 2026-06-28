@@ -30,6 +30,10 @@ import { connectRedis, disconnectRedis } from './infrastructure/redis/redis.js';
 import { prisma } from './prisma/prisma.js';
 import { closeAllQueues } from './queues/index.js';
 import { initSocketServer, getSocketServer } from './sockets/index.js';
+import { createWorkflowWorker } from './workers/workflow.worker.js';
+import { createAiWorker } from './workers/ai.worker.js';
+import { createEmailWorker } from './workers/email.worker.js';
+import { createDocumentIndexingWorker } from './workers/document-indexing.worker.js';
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
@@ -39,6 +43,15 @@ async function bootstrap(): Promise<void> {
   // Redis must be connected before the app starts handling requests,
   // because health checks and BullMQ queues both depend on it.
   await connectRedis();
+
+  // Start background workers in the same process to simplify hosting and ensure queues are processed
+  logger.info('⚙️ Starting background workers in API process');
+  const workers = [
+    createWorkflowWorker(),
+    createAiWorker(),
+    createEmailWorker(),
+    createDocumentIndexingWorker(),
+  ];
 
   // ── Initialize Express app ───────────────────────────────────────────────
   const app = createApp();
@@ -98,14 +111,19 @@ async function bootstrap(): Promise<void> {
       });
       logger.info('Socket.io server closed');
 
-      // 3. Disconnect Prisma — closes the connection pool cleanly
+      // 3. Close in-process BullMQ workers — wait for current jobs to finish
+      logger.info('Closing background workers...');
+      await Promise.all(workers.map((w) => w.close().catch(() => {})));
+      logger.info('Background workers closed');
+
+      // 4. Disconnect Prisma — closes the connection pool cleanly
       await prisma.$disconnect();
       logger.info('Prisma disconnected');
 
-      // 4. Close BullMQ queue connections
+      // 5. Close BullMQ queue connections
       await closeAllQueues();
 
-      // 5. Disconnect Redis — flushes pending commands, sends QUIT
+      // 6. Disconnect Redis — flushes pending commands, sends QUIT
       await disconnectRedis();
 
       logger.info('Graceful shutdown complete. Goodbye 👋');
