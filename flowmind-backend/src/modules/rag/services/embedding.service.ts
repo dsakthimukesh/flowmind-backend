@@ -16,7 +16,7 @@ import { createLogger } from '../../../common/logger.js';
 const log = createLogger('embedding-service');
 
 const GEMINI_EMBEDDING_MODEL = 'text-embedding-004';
-const GROQ_EMBEDDING_MODEL = 'nomic-embed-text-v1.5';
+const OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,20 +28,19 @@ export interface EmbeddingResult {
 // ─── Client singletons ────────────────────────────────────────────────────────
 
 let _geminiClient: GoogleGenAI | null = null;
-let _groqClient: OpenAI | null = null;
+let _openaiClient: OpenAI | null = null;
 
-function getEmbeddingProvider(): { type: 'groq' | 'gemini'; client: any; model: string } {
-  const groqApiKey = process.env['GROQ_API_KEY'];
-  if (groqApiKey) {
-    if (!_groqClient) {
-      _groqClient = new OpenAI({
-        apiKey: groqApiKey,
-        baseURL: 'https://api.groq.com/openai/v1',
-      });
+function getEmbeddingProvider(): { type: 'openai' | 'gemini'; client: any; model: string } {
+  // If OpenAI key is set and valid, prioritize it
+  const openaiApiKey = process.env['OPENAI_API_KEY'];
+  if (openaiApiKey && !openaiApiKey.includes('your-openai-api-key')) {
+    if (!_openaiClient) {
+      _openaiClient = new OpenAI({ apiKey: openaiApiKey });
     }
-    return { type: 'groq', client: _groqClient, model: GROQ_EMBEDDING_MODEL };
+    return { type: 'openai', client: _openaiClient, model: OPENAI_EMBEDDING_MODEL };
   }
 
+  // Fall back to Gemini API key
   const geminiApiKey = process.env['GEMINI_API_KEY'];
   if (geminiApiKey) {
     if (!_geminiClient) {
@@ -51,7 +50,7 @@ function getEmbeddingProvider(): { type: 'groq' | 'gemini'; client: any; model: 
   }
 
   throw new AppError(
-    'No AI provider configured for embeddings. Please set GROQ_API_KEY or GEMINI_API_KEY.',
+    'No AI provider configured for embeddings. Please set GEMINI_API_KEY or OPENAI_API_KEY.',
     500,
     'AI_NOT_CONFIGURED',
   );
@@ -63,15 +62,16 @@ export async function embedText(text: string): Promise<number[]> {
   const provider = getEmbeddingProvider();
 
   try {
-    if (provider.type === 'groq') {
+    if (provider.type === 'openai') {
       const response = await (provider.client as OpenAI).embeddings.create({
         model: provider.model,
         input: text,
+        dimensions: 768, // Force 768 dimensions to fit pgvector schema
       });
 
       const values = response.data?.[0]?.embedding;
       if (!values || values.length === 0) {
-        throw new Error('Empty embedding response from Groq');
+        throw new Error('Empty embedding response from OpenAI');
       }
 
       return values;
@@ -99,9 +99,6 @@ export async function embedText(text: string): Promise<number[]> {
 
 /**
  * Embed multiple text chunks in sequence.
- * Gemini v1 does not support true batch embedding in a single request,
- * so we run them sequentially with a small delay to respect rate limits.
- * Swap this for parallel batch calls when the Gemini batch API is available.
  */
 export async function embedChunks(
   chunks: Array<{ chunkIndex: number; content: string }>,
@@ -112,7 +109,6 @@ export async function embedChunks(
     const vector = await embedText(chunk.content);
     results.push({ chunkIndex: chunk.chunkIndex, vector });
 
-    // Brief pause between requests to avoid rate limit (1000 QPM on free tier)
     if (chunks.length > 1) {
       await new Promise((resolve) => setTimeout(resolve, 60));
     }
