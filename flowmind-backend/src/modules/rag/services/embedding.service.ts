@@ -61,8 +61,9 @@ export async function embedText(text: string): Promise<number[]> {
 
     return values;
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     log.error({ err }, 'Gemini embedContent failed');
-    throw new AppError('Embedding generation failed', 502, 'EMBEDDING_ERROR');
+    throw new AppError(`Embedding generation failed: ${msg}`, 502, 'EMBEDDING_ERROR');
   }
 }
 
