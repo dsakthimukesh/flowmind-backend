@@ -18,9 +18,10 @@ type Execution = WorkflowExecutionModel;
 export async function findExecutionsByOrg(
   organizationId: string,
   limit = 50,
-): Promise<Execution[]> {
+): Promise<any[]> {
   return prisma.workflowExecution.findMany({
     where: { workflow: { organizationId, deletedAt: null } },
+    include: { workflow: { select: { name: true } } },
     orderBy: { createdAt: 'desc' },
     take: limit,
   });
@@ -33,9 +34,10 @@ export async function findExecutionsByOrg(
 export async function findExecutionByIdAndOrg(
   id: string,
   organizationId: string,
-): Promise<Execution | null> {
+): Promise<any | null> {
   return prisma.workflowExecution.findFirst({
     where: { id, workflow: { organizationId, deletedAt: null } },
+    include: { workflow: { select: { name: true } } },
   });
 }
 

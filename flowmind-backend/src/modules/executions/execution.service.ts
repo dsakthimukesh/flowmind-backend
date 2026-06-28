@@ -28,20 +28,10 @@ export interface ExecutionView {
   errorMessage: string | null;
   createdAt: Date;
   updatedAt: Date;
+  workflowName?: string;
 }
 
-function toView(e: {
-  id: string;
-  workflowId: string;
-  workflowVersionId: string;
-  status: string;
-  triggeredBy: string;
-  startedAt: Date | null;
-  completedAt: Date | null;
-  errorMessage: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}): ExecutionView {
+function toView(e: any): ExecutionView {
   return {
     id: e.id,
     workflowId: e.workflowId,
@@ -53,6 +43,7 @@ function toView(e: {
     errorMessage: e.errorMessage,
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
+    workflowName: e.workflow?.name || 'Unknown Workflow',
   };
 }
 

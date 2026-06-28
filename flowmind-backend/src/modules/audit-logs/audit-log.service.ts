@@ -49,5 +49,42 @@ export async function getAuditLogs(
     }),
     prisma.auditLog.count({ where: { organizationId } }),
   ]);
-  return { logs, total, page, pageSize };
+
+  // Fetch related users to populate the actor details
+  const userIds = [...new Set(logs.map((l) => l.userId).filter(Boolean))] as string[];
+  const users = userIds.length > 0
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, email: true, firstName: true, lastName: true },
+      })
+    : [];
+
+  const userMap = new Map(users.map((u) => [u.id, u]));
+
+  const logsWithActor = logs.map((l) => {
+    const user = l.userId ? userMap.get(l.userId) : null;
+    return {
+      id: l.id,
+      timestamp: l.createdAt.toISOString(),
+      action: l.action,
+      resourceType: l.resourceType || "",
+      resourceId: l.resourceId || "",
+      actor: user
+        ? {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+          }
+        : {
+            id: "system",
+            email: "system@flowmind.ai",
+            firstName: "System",
+            lastName: "Process",
+          },
+      metadata: (l.metadata as any) || {},
+    };
+  });
+
+  return { logs: logsWithActor, total, page, pageSize };
 }
